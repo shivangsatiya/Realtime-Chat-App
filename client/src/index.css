@@ -675,6 +675,7 @@ a {
 
 .message-bubble {
   max-width: 68%;
+  width: fit-content;
   padding: 0.55rem 0.9rem;
   border-radius: 1rem;
   font-size: 0.9rem;
