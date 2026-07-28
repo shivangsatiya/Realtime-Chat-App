@@ -22,6 +22,12 @@ const removeOnlineSocket = (userId, socketId) => {
   return false;
 };
 
+// Shared authorization check: is this user actually a participant of this
+// conversation? Every socket handler that touches a conversationId must use
+// this before acting on it — Socket.IO does not enforce this automatically.
+const isParticipant = (conversation, userId) =>
+  !!conversation && conversation.participants.some((p) => String(p) === userId);
+
 export const initSocket = (io) => {
   // Authenticate every socket connection using the same JWT issued by /api/auth
   io.use(async (socket, next) => {
@@ -54,7 +60,9 @@ export const initSocket = (io) => {
     conversations.forEach((c) => socket.join(String(c._id)));
 
     // --- Join a specific conversation room on demand (e.g. right after creating it) ---
-    socket.on("conversation:join", (conversationId) => {
+    socket.on("conversation:join", async (conversationId) => {
+      const conversation = await Conversation.findById(conversationId);
+      if (!isParticipant(conversation, userId)) return;
       socket.join(conversationId);
     });
 
@@ -66,7 +74,7 @@ export const initSocket = (io) => {
         }
 
         const conversation = await Conversation.findById(conversationId);
-        if (!conversation || !conversation.participants.some((p) => String(p) === userId)) {
+        if (!isParticipant(conversation, userId)) {
           return callback?.({ error: "Not a participant of this conversation" });
         }
 
@@ -111,6 +119,9 @@ export const initSocket = (io) => {
     // --- Read receipts ---
     socket.on("message:read", async ({ conversationId }) => {
       try {
+        const conversation = await Conversation.findById(conversationId);
+        if (!isParticipant(conversation, userId)) return;
+
         await Message.updateMany(
           { conversation: conversationId, readBy: { $ne: userId } },
           { $addToSet: { readBy: userId } }
