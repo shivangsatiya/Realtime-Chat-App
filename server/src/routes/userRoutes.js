@@ -2,6 +2,8 @@ import express from "express";
 import User from "../models/User.js";
 import { protect } from "../middleware/auth.js";
 import asyncHandler from "../middleware/asyncHandler.js";
+import validate from "../middleware/validate.js";
+import { searchQuerySchema } from "../validators/userValidators.js";
 
 const router = express.Router();
 
@@ -10,6 +12,7 @@ const router = express.Router();
 router.get(
   "/",
   protect,
+  validate(searchQuerySchema, "query"),
   asyncHandler(async (req, res) => {
     const { search } = req.query;
     const filter = { _id: { $ne: req.user._id } };

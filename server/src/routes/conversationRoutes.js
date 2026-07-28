@@ -2,6 +2,8 @@ import express from "express";
 import Conversation from "../models/Conversation.js";
 import { protect } from "../middleware/auth.js";
 import asyncHandler from "../middleware/asyncHandler.js";
+import validate from "../middleware/validate.js";
+import { startPrivateSchema, createGroupSchema } from "../validators/conversationValidators.js";
 
 const router = express.Router();
 
@@ -28,9 +30,9 @@ router.get(
 router.post(
   "/private",
   protect,
+  validate(startPrivateSchema),
   asyncHandler(async (req, res) => {
     const { userId } = req.body;
-    if (!userId) return res.status(400).json({ message: "userId is required" });
 
     let conversation = await Conversation.findOne({
       isGroup: false,
@@ -54,13 +56,9 @@ router.post(
 router.post(
   "/group",
   protect,
+  validate(createGroupSchema),
   asyncHandler(async (req, res) => {
     const { name, participantIds } = req.body;
-    if (!name || !Array.isArray(participantIds) || participantIds.length < 2) {
-      return res
-        .status(400)
-        .json({ message: "Group name and at least 2 other participants are required" });
-    }
 
     const participants = [...new Set([...participantIds, String(req.user._id)])];
 

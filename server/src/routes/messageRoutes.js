@@ -3,6 +3,8 @@ import Message from "../models/Message.js";
 import Conversation from "../models/Conversation.js";
 import { protect } from "../middleware/auth.js";
 import asyncHandler from "../middleware/asyncHandler.js";
+import validate from "../middleware/validate.js";
+import { conversationIdParamSchema } from "../validators/messageValidators.js";
 
 const router = express.Router();
 
@@ -10,6 +12,7 @@ const router = express.Router();
 router.get(
   "/:conversationId",
   protect,
+  validate(conversationIdParamSchema, "params"),
   asyncHandler(async (req, res) => {
     const { conversationId } = req.params;
 

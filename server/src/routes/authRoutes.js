@@ -3,21 +3,17 @@ import User from "../models/User.js";
 import { generateToken } from "../utils/generateToken.js";
 import { protect } from "../middleware/auth.js";
 import asyncHandler from "../middleware/asyncHandler.js";
+import validate from "../middleware/validate.js";
+import { registerSchema, loginSchema } from "../validators/authValidators.js";
 
 const router = express.Router();
 
 // @route  POST /api/auth/register
 router.post(
   "/register",
+  validate(registerSchema),
   asyncHandler(async (req, res) => {
     const { username, email, password } = req.body;
-
-    if (!username || !email || !password) {
-      return res.status(400).json({ message: "All fields are required" });
-    }
-    if (password.length < 6) {
-      return res.status(400).json({ message: "Password must be at least 6 characters" });
-    }
 
     const existing = await User.findOne({ $or: [{ email }, { username }] });
     if (existing) {
@@ -34,11 +30,9 @@ router.post(
 // @route  POST /api/auth/login
 router.post(
   "/login",
+  validate(loginSchema),
   asyncHandler(async (req, res) => {
     const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ message: "Email and password are required" });
-    }
 
     const user = await User.findOne({ email });
     if (!user || !(await user.comparePassword(password))) {

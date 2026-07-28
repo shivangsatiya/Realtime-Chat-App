@@ -35,10 +35,18 @@ app.use((req, res) => {
   res.status(404).json({ message: "Route not found" });
 });
 
-// Centralized error handler
+// Centralized error handler. Every route error now funnels through here —
+// unexpected exceptions via asyncHandler, and validation failures via
+// ValidationError — both simply call next(err). Anything without a
+// .statusCode (i.e. every error case that existed before this change)
+// behaves exactly as it did previously: logged, and a generic 500.
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ message: "Internal server error" });
+  const statusCode = err.statusCode || 500;
+  const message = statusCode === 500 ? "Internal server error" : err.message;
+  const response = { message };
+  if (err.details) response.details = err.details;
+  res.status(statusCode).json(response);
 });
 
 const io = new Server(server, {
