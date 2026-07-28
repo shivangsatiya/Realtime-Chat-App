@@ -1,13 +1,16 @@
 import express from "express";
 import Conversation from "../models/Conversation.js";
 import { protect } from "../middleware/auth.js";
+import asyncHandler from "../middleware/asyncHandler.js";
 
 const router = express.Router();
 
 // @route  GET /api/conversations
 // List all conversations the current user belongs to, most recent first
-router.get("/", protect, async (req, res) => {
-  try {
+router.get(
+  "/",
+  protect,
+  asyncHandler(async (req, res) => {
     const conversations = await Conversation.find({ participants: req.user._id })
       .populate("participants", "-password")
       .populate({
@@ -17,15 +20,15 @@ router.get("/", protect, async (req, res) => {
       .sort({ updatedAt: -1 });
 
     res.json({ conversations });
-  } catch (err) {
-    res.status(500).json({ message: "Failed to fetch conversations", error: err.message });
-  }
-});
+  })
+);
 
 // @route  POST /api/conversations/private
 // body: { userId } -> finds or creates a 1-on-1 conversation
-router.post("/private", protect, async (req, res) => {
-  try {
+router.post(
+  "/private",
+  protect,
+  asyncHandler(async (req, res) => {
     const { userId } = req.body;
     if (!userId) return res.status(400).json({ message: "userId is required" });
 
@@ -43,15 +46,15 @@ router.post("/private", protect, async (req, res) => {
     }
 
     res.status(200).json({ conversation });
-  } catch (err) {
-    res.status(500).json({ message: "Failed to start conversation", error: err.message });
-  }
-});
+  })
+);
 
 // @route  POST /api/conversations/group
 // body: { name, participantIds: [] }
-router.post("/group", protect, async (req, res) => {
-  try {
+router.post(
+  "/group",
+  protect,
+  asyncHandler(async (req, res) => {
     const { name, participantIds } = req.body;
     if (!name || !Array.isArray(participantIds) || participantIds.length < 2) {
       return res
@@ -70,9 +73,7 @@ router.post("/group", protect, async (req, res) => {
 
     const populated = await conversation.populate("participants", "-password");
     res.status(201).json({ conversation: populated });
-  } catch (err) {
-    res.status(500).json({ message: "Failed to create group", error: err.message });
-  }
-});
+  })
+);
 
 export default router;

@@ -2,12 +2,14 @@ import express from "express";
 import User from "../models/User.js";
 import { generateToken } from "../utils/generateToken.js";
 import { protect } from "../middleware/auth.js";
+import asyncHandler from "../middleware/asyncHandler.js";
 
 const router = express.Router();
 
 // @route  POST /api/auth/register
-router.post("/register", async (req, res) => {
-  try {
+router.post(
+  "/register",
+  asyncHandler(async (req, res) => {
     const { username, email, password } = req.body;
 
     if (!username || !email || !password) {
@@ -26,14 +28,13 @@ router.post("/register", async (req, res) => {
     const token = generateToken(user._id);
 
     res.status(201).json({ token, user: user.toSafeObject() });
-  } catch (err) {
-    res.status(500).json({ message: "Registration failed", error: err.message });
-  }
-});
+  })
+);
 
 // @route  POST /api/auth/login
-router.post("/login", async (req, res) => {
-  try {
+router.post(
+  "/login",
+  asyncHandler(async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) {
       return res.status(400).json({ message: "Email and password are required" });
@@ -49,14 +50,16 @@ router.post("/login", async (req, res) => {
 
     const token = generateToken(user._id);
     res.json({ token, user: user.toSafeObject() });
-  } catch (err) {
-    res.status(500).json({ message: "Login failed", error: err.message });
-  }
-});
+  })
+);
 
 // @route  GET /api/auth/me
-router.get("/me", protect, async (req, res) => {
-  res.json({ user: req.user.toSafeObject() });
-});
+router.get(
+  "/me",
+  protect,
+  asyncHandler(async (req, res) => {
+    res.json({ user: req.user.toSafeObject() });
+  })
+);
 
 export default router;
