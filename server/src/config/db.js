@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import logger from "./logger.js";
 
 export const connectDB = async () => {
   try {
@@ -7,9 +8,9 @@ export const connectDB = async () => {
       throw new Error("MONGO_URI is not set in .env");
     }
     const conn = await mongoose.connect(uri);
-    console.log(`MongoDB connected: ${conn.connection.host}`);
+    logger.info(`MongoDB connected: ${conn.connection.host}`);
   } catch (err) {
-    console.error(`MongoDB connection error: ${err.message}`);
+    logger.error({ err }, "MongoDB connection error");
     process.exit(1);
   }
 };

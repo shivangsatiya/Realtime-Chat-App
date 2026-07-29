@@ -104,8 +104,14 @@ const MessageBubble = ({ message, isOwn, showSender, onReply, onReact, onEdit, o
           <div className={`message-bubble ${isOwn ? "own" : "other"}`}>
             {message.replyTo && (
               <div className="reply-quote">
-                <span className="reply-quote-sender">{message.replyTo.sender?.username}</span>
-                <span className="reply-quote-text">{message.replyTo.text}</span>
+                {message.replyTo.isDeleted ? (
+                  <span className="reply-quote-text fst-italic">Original message was deleted</span>
+                ) : (
+                  <>
+                    <span className="reply-quote-sender">{message.replyTo.sender?.username}</span>
+                    <span className="reply-quote-text">{message.replyTo.text}</span>
+                  </>
+                )}
               </div>
             )}
             {message.attachment?.url && message.attachment.type === "image" && (

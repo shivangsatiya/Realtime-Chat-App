@@ -8,7 +8,7 @@ import ChatWindow from "../components/ChatWindow.jsx";
 
 const Chat = () => {
   const { user } = useAuth();
-  const { socket } = useSocket();
+  const { socket, connected, hasConnectedOnce } = useSocket();
   const [conversations, setConversations] = useState([]);
   const [activeConversation, setActiveConversation] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -28,6 +28,12 @@ const Chat = () => {
       try {
         const { data } = await api.get("/conversations");
         setConversations(data.conversations);
+
+        const storedId = sessionStorage.getItem("wire_active_conversation");
+        if (storedId) {
+          const match = data.conversations.find((c) => c._id === storedId);
+          if (match) setActiveConversation(match);
+        }
       } finally {
         setLoading(false);
       }
@@ -76,10 +82,12 @@ const Chat = () => {
     });
     socket?.emit("conversation:join", conversation._id);
     setActiveConversation(conversation);
+    sessionStorage.setItem("wire_active_conversation", conversation._id);
   };
 
   const handleSelect = (conversation) => {
     setActiveConversation(conversation);
+    sessionStorage.setItem("wire_active_conversation", conversation._id);
     setUnreadIds((prev) => {
       if (!prev.has(conversation._id)) return prev;
       const next = new Set(prev);
@@ -102,7 +110,14 @@ const Chat = () => {
     : "d-none d-md-flex flex-grow-1 h-100";
 
   return (
-    <div className="chat-shell">
+    <div className="chat-shell-wrap">
+      {hasConnectedOnce && !connected && (
+        <div className="reconnect-banner">
+          <span className="pulse-dot" style={{ height: 7, width: 7, background: "var(--color-danger)" }} />
+          Reconnecting…
+        </div>
+      )}
+      <div className="chat-shell">
       <div className={sidebarWrapperClass}>
         {loading ? (
           <div className="sidebar-panel align-items-center justify-content-center">
@@ -127,7 +142,10 @@ const Chat = () => {
             key={activeConversation._id}
             conversation={activeConversation}
             onMessageActivity={updateConversationWithMessage}
-            onBack={() => setActiveConversation(null)}
+            onBack={() => {
+              setActiveConversation(null);
+              sessionStorage.removeItem("wire_active_conversation");
+            }}
           />
         ) : (
           <div className="d-flex flex-column align-items-center justify-content-center flex-grow-1 text-center px-4">
@@ -141,6 +159,7 @@ const Chat = () => {
           </div>
         )}
       </div>
+    </div>
     </div>
   );
 };

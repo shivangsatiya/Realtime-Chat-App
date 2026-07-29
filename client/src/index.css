@@ -428,6 +428,31 @@ a {
 }
 
 /* ---------- Chat shell layout ---------- */
+.chat-shell-wrap {
+  position: relative;
+  height: 100vh;
+}
+
+.reconnect-banner {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-top: none;
+  border-radius: 0 0 0.5rem 0.5rem;
+  padding: 0.4rem 1rem;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  animation: fadeInUp 0.2s ease both;
+}
+
 .chat-shell {
   height: 100vh;
   display: flex;

@@ -2,9 +2,16 @@ import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import Conversation from "../models/Conversation.js";
 import Message from "../models/Message.js";
+import logger from "../config/logger.js";
+import { isParticipant } from "./isParticipant.js";
 
 // Maps a userId -> Set of active socket ids (a user can have multiple tabs/devices open)
 const onlineUsers = new Map();
+
+// Maps a socket.id -> Set of conversationIds this socket last emitted
+// typing:start for without a matching typing:stop. Lets us clear a stuck
+// "X is typing…" indicator if the socket disconnects mid-type.
+const typingSessions = new Map();
 
 const addOnlineSocket = (userId, socketId) => {
   if (!onlineUsers.has(userId)) onlineUsers.set(userId, new Set());
@@ -22,18 +29,12 @@ const removeOnlineSocket = (userId, socketId) => {
   return false;
 };
 
-// Shared authorization check: is this user actually a participant of this
-// conversation? Every socket handler that touches a conversationId must use
-// this before acting on it — Socket.IO does not enforce this automatically.
-const isParticipant = (conversation, userId) =>
-  !!conversation && conversation.participants.some((p) => String(p) === userId);
-
 // Logs the real error server-side and returns a generic message to the
 // client. Sockets don't go through Express's centralized error middleware,
 // but this applies the same principle: no internal error details (Mongoose
 // CastErrors, validation text, etc.) ever reach the client.
 const handleSocketError = (err, callback) => {
-  console.error(err);
+  logger.error({ err }, "Socket handler error");
   callback?.({ error: "Something went wrong. Please try again." });
 };
 
@@ -122,7 +123,7 @@ export const initSocket = (io) => {
           { path: "sender", select: "username avatarColor" },
           {
             path: "replyTo",
-            select: "text sender",
+            select: "text sender isDeleted",
             populate: { path: "sender", select: "username" },
           },
         ]);
@@ -243,6 +244,10 @@ export const initSocket = (io) => {
       try {
         const conversation = await Conversation.findById(conversationId);
         if (!isParticipant(conversation, userId)) return;
+
+        if (!typingSessions.has(socket.id)) typingSessions.set(socket.id, new Set());
+        typingSessions.get(socket.id).add(conversationId);
+
         socket.to(conversationId).emit("typing:update", {
           conversationId,
           userId,
@@ -258,6 +263,9 @@ export const initSocket = (io) => {
       try {
         const conversation = await Conversation.findById(conversationId);
         if (!isParticipant(conversation, userId)) return;
+
+        typingSessions.get(socket.id)?.delete(conversationId);
+
         socket.to(conversationId).emit("typing:update", {
           conversationId,
           userId,
@@ -287,6 +295,19 @@ export const initSocket = (io) => {
 
     // --- Disconnect / presence teardown ---
     socket.on("disconnect", async () => {
+      const stillTyping = typingSessions.get(socket.id);
+      if (stillTyping) {
+        stillTyping.forEach((conversationId) => {
+          socket.to(conversationId).emit("typing:update", {
+            conversationId,
+            userId,
+            username: socket.user.username,
+            isTyping: false,
+          });
+        });
+        typingSessions.delete(socket.id);
+      }
+
       const wentOffline = removeOnlineSocket(userId, socket.id);
       if (wentOffline) {
         await User.findByIdAndUpdate(userId, { isOnline: false, lastSeen: new Date() });

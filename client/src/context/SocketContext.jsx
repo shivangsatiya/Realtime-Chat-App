@@ -10,6 +10,7 @@ export const SocketProvider = ({ children }) => {
   const { token, user } = useAuth();
   const socketRef = useRef(null);
   const [connected, setConnected] = useState(false);
+  const [hasConnectedOnce, setHasConnectedOnce] = useState(false);
   const [onlineUserIds, setOnlineUserIds] = useState(new Set());
 
   useEffect(() => {
@@ -21,7 +22,10 @@ export const SocketProvider = ({ children }) => {
     });
     socketRef.current = socket;
 
-    socket.on("connect", () => setConnected(true));
+    socket.on("connect", () => {
+      setConnected(true);
+      setHasConnectedOnce(true);
+    });
     socket.on("disconnect", () => setConnected(false));
 
     socket.on("presence:update", ({ userId, isOnline }) => {
@@ -40,7 +44,7 @@ export const SocketProvider = ({ children }) => {
   }, [token, user]);
 
   return (
-    <SocketContext.Provider value={{ socket: socketRef.current, connected, onlineUserIds }}>
+    <SocketContext.Provider value={{ socket: socketRef.current, connected, hasConnectedOnce, onlineUserIds }}>
       {children}
     </SocketContext.Provider>
   );
