@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 const TYPING_STOP_DELAY = 1500;
 const SENT_FLOURISH_DURATION = 400;
 
-const MessageInput = ({ conversationId, socket, replyingTo, onCancelReply }) => {
+const MessageInput = ({ conversationId, socket, replyingTo, onCancelReply, editingMessage, onCancelEdit }) => {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [justSent, setJustSent] = useState(false);
@@ -22,6 +22,14 @@ const MessageInput = ({ conversationId, socket, replyingTo, onCancelReply }) => 
   useEffect(() => {
     if (replyingTo) inputRef.current?.focus();
   }, [replyingTo]);
+
+  // Prefill with the existing text the moment an edit target is picked
+  useEffect(() => {
+    if (editingMessage) {
+      setText(editingMessage.text);
+      inputRef.current?.focus();
+    }
+  }, [editingMessage]);
 
   const stopTyping = () => {
     if (isTypingRef.current) {
@@ -51,6 +59,21 @@ const MessageInput = ({ conversationId, socket, replyingTo, onCancelReply }) => 
     setSending(true);
     stopTyping();
 
+    if (editingMessage) {
+      socket.emit(
+        "message:edit",
+        { conversationId, messageId: editingMessage._id, text: trimmed },
+        (response) => {
+          setSending(false);
+          if (!response?.error) {
+            setText("");
+            onCancelEdit?.();
+          }
+        }
+      );
+      return;
+    }
+
     socket.emit(
       "message:send",
       { conversationId, text: trimmed, replyTo: replyingTo?._id },
@@ -68,7 +91,25 @@ const MessageInput = ({ conversationId, socket, replyingTo, onCancelReply }) => 
 
   return (
     <div className="message-input-area">
-      {replyingTo && (
+      {editingMessage && (
+        <div className="reply-preview-bar">
+          <div className="reply-preview-content">
+            <span className="reply-preview-label">
+              <i className="bi bi-pencil-fill me-1" />
+              Editing message
+            </span>
+          </div>
+          <button
+            type="button"
+            className="reply-preview-cancel"
+            onClick={onCancelEdit}
+            aria-label="Cancel edit"
+          >
+            <i className="bi bi-x-lg" />
+          </button>
+        </div>
+      )}
+      {!editingMessage && replyingTo && (
         <div className="reply-preview-bar">
           <div className="reply-preview-content">
             <span className="reply-preview-label">Replying to {replyingTo.sender?.username}</span>
@@ -98,9 +139,9 @@ const MessageInput = ({ conversationId, socket, replyingTo, onCancelReply }) => 
           type="submit"
           disabled={!text.trim() || sending}
           className={`send-btn ${justSent ? "sent" : ""}`}
-          aria-label="Send message"
+          aria-label={editingMessage ? "Save edit" : "Send message"}
         >
-          <i className="bi bi-send-fill" style={{ fontSize: "0.95rem" }} />
+          <i className={`bi ${editingMessage ? "bi-check-lg" : "bi-send-fill"}`} style={{ fontSize: "0.95rem" }} />
         </button>
       </form>
     </div>

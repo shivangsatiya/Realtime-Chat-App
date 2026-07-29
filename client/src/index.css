@@ -637,6 +637,67 @@ a {
   background-color: var(--color-surface);
 }
 
+.search-panel {
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.75rem 1.25rem;
+  animation: fadeInUp 0.2s ease both;
+}
+
+.search-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.search-input-wrap .form-control {
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.search-input-wrap .form-control:focus {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 0.2rem var(--color-accent-soft);
+}
+
+.search-results {
+  max-height: 220px;
+  overflow-y: auto;
+  margin-top: 0.5rem;
+}
+
+.search-result-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.4rem 0.25rem;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.85rem;
+}
+
+.search-result-sender {
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.search-result-text {
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.search-result-time {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
 .message-list {
   flex: 1;
   overflow-y: auto;
@@ -671,6 +732,94 @@ a {
 .message-row.other .message-col {
   align-items: flex-start;
   animation: messageInLeft 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.message-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.message-row.own .message-actions {
+  flex-direction: row-reverse;
+}
+
+.reaction-picker-wrap {
+  position: relative;
+}
+
+.reaction-picker {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 0.3rem;
+  display: flex;
+  gap: 0.15rem;
+  background-color: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0.3rem 0.5rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  z-index: 10;
+  animation: popIn 0.15s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.reaction-picker-option {
+  background: transparent;
+  border: none;
+  font-size: 1.1rem;
+  padding: 0.15rem 0.25rem;
+  border-radius: 50%;
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.reaction-picker-option:hover {
+  background-color: var(--color-surface-hover);
+  transform: scale(1.25);
+}
+
+.reaction-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+}
+
+.reaction-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background-color: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.78rem;
+  color: var(--color-text);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+  animation: popIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.reaction-pill:hover {
+  transform: scale(1.05);
+}
+
+.reaction-pill.mine {
+  border-color: var(--color-accent);
+  background-color: var(--color-accent-soft);
+}
+
+.reaction-count {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+}
+
+.message-bubble.deleted {
+  background-color: transparent;
+  border: 1px dashed var(--color-border);
+  color: var(--color-text-muted);
+  font-style: italic;
 }
 
 .message-bubble-wrap {

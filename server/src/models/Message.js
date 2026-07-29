@@ -30,8 +30,24 @@ const messageSchema = new mongoose.Schema(
       ref: "Message",
       default: null,
     },
+    reactions: [
+      {
+        emoji: { type: String, required: true },
+        user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+      },
+    ],
+    editedAt: {
+      type: Date,
+      default: null,
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );
+
+messageSchema.index({ text: "text" });
 
 export default mongoose.model("Message", messageSchema);

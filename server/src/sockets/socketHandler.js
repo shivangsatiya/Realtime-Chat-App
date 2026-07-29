@@ -117,6 +117,110 @@ export const initSocket = (io) => {
       }
     });
 
+    // --- React to a message (toggle) ---
+    socket.on("message:react", async ({ conversationId, messageId, emoji }, callback) => {
+      try {
+        if (!emoji || typeof emoji !== "string" || emoji.length > 8) {
+          return callback?.({ error: "Invalid emoji" });
+        }
+
+        const conversation = await Conversation.findById(conversationId);
+        if (!isParticipant(conversation, userId)) {
+          return callback?.({ error: "Not a participant of this conversation" });
+        }
+
+        const message = await Message.findOne({ _id: messageId, conversation: conversationId });
+        if (!message) {
+          return callback?.({ error: "Message not found in this conversation" });
+        }
+
+        const existingIndex = message.reactions.findIndex(
+          (r) => String(r.user) === userId && r.emoji === emoji
+        );
+        if (existingIndex > -1) {
+          message.reactions.splice(existingIndex, 1); // toggle off
+        } else {
+          message.reactions.push({ emoji, user: userId });
+        }
+
+        await message.save();
+        await message.populate({ path: "reactions.user", select: "username" });
+
+        io.to(conversationId).emit("message:reaction-update", {
+          messageId: message._id,
+          reactions: message.reactions,
+        });
+        callback?.({ reactions: message.reactions });
+      } catch (err) {
+        callback?.({ error: err.message });
+      }
+    });
+
+    // --- Edit a message (sender only) ---
+    socket.on("message:edit", async ({ conversationId, messageId, text }, callback) => {
+      try {
+        if (!text || !text.trim()) {
+          return callback?.({ error: "Message cannot be empty" });
+        }
+
+        const conversation = await Conversation.findById(conversationId);
+        if (!isParticipant(conversation, userId)) {
+          return callback?.({ error: "Not a participant of this conversation" });
+        }
+
+        const message = await Message.findOne({ _id: messageId, conversation: conversationId });
+        if (!message) {
+          return callback?.({ error: "Message not found in this conversation" });
+        }
+        if (String(message.sender) !== userId) {
+          return callback?.({ error: "You can only edit your own messages" });
+        }
+        if (message.isDeleted) {
+          return callback?.({ error: "Cannot edit a deleted message" });
+        }
+
+        message.text = text.trim();
+        message.editedAt = new Date();
+        await message.save();
+
+        io.to(conversationId).emit("message:edited", {
+          messageId: message._id,
+          text: message.text,
+          editedAt: message.editedAt,
+        });
+        callback?.({ message });
+      } catch (err) {
+        callback?.({ error: err.message });
+      }
+    });
+
+    // --- Delete a message (soft delete, sender only) ---
+    socket.on("message:delete", async ({ conversationId, messageId }, callback) => {
+      try {
+        const conversation = await Conversation.findById(conversationId);
+        if (!isParticipant(conversation, userId)) {
+          return callback?.({ error: "Not a participant of this conversation" });
+        }
+
+        const message = await Message.findOne({ _id: messageId, conversation: conversationId });
+        if (!message) {
+          return callback?.({ error: "Message not found in this conversation" });
+        }
+        if (String(message.sender) !== userId) {
+          return callback?.({ error: "You can only delete your own messages" });
+        }
+
+        message.isDeleted = true;
+        message.text = "";
+        await message.save();
+
+        io.to(conversationId).emit("message:deleted", { messageId: message._id });
+        callback?.({ success: true });
+      } catch (err) {
+        callback?.({ error: err.message });
+      }
+    });
+
     // --- Typing indicators ---
     socket.on("typing:start", ({ conversationId }) => {
       socket.to(conversationId).emit("typing:update", {

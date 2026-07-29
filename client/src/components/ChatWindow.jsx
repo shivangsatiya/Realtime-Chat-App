@@ -13,6 +13,9 @@ const getConversationLabel = (conversation, currentUserId) => {
   return other?.username || "Unknown user";
 };
 
+const formatSearchTime = (isoString) =>
+  new Date(isoString).toLocaleDateString([], { month: "short", day: "numeric" });
+
 const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
   const { user } = useAuth();
   const { socket, onlineUserIds } = useSocket();
@@ -21,6 +24,12 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
   const [typingUsers, setTypingUsers] = useState({}); // userId -> username
   const [otherHasSeenLatest, setOtherHasSeenLatest] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const searchDebounceRef = useRef(null);
   const bottomRef = useRef(null);
   const conversationId = conversation._id;
 
@@ -38,6 +47,7 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
     setTypingUsers({});
     setOtherHasSeenLatest(false);
     setReplyingTo(null);
+    setEditingMessage(null);
 
     const load = async () => {
       try {
@@ -85,14 +95,34 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
       setOtherHasSeenLatest(true);
     };
 
+    const handleReactionUpdate = ({ messageId, reactions }) => {
+      setMessages((prev) => prev.map((m) => (m._id === messageId ? { ...m, reactions } : m)));
+    };
+
+    const handleEdited = ({ messageId, text, editedAt }) => {
+      setMessages((prev) => prev.map((m) => (m._id === messageId ? { ...m, text, editedAt } : m)));
+    };
+
+    const handleDeleted = ({ messageId }) => {
+      setMessages((prev) =>
+        prev.map((m) => (m._id === messageId ? { ...m, isDeleted: true, text: "" } : m))
+      );
+    };
+
     socket.on("message:new", handleNewMessage);
     socket.on("typing:update", handleTyping);
     socket.on("message:read-update", handleReadUpdate);
+    socket.on("message:reaction-update", handleReactionUpdate);
+    socket.on("message:edited", handleEdited);
+    socket.on("message:deleted", handleDeleted);
 
     return () => {
       socket.off("message:new", handleNewMessage);
       socket.off("typing:update", handleTyping);
       socket.off("message:read-update", handleReadUpdate);
+      socket.off("message:reaction-update", handleReactionUpdate);
+      socket.off("message:edited", handleEdited);
+      socket.off("message:deleted", handleDeleted);
     };
   }, [socket, conversationId, user.id, onMessageActivity]);
 
@@ -103,6 +133,58 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
   const typingLabel = Object.values(typingUsers)[0]
     ? `${Object.values(typingUsers)[0]} is typing…`
     : null;
+
+  const handleReply = (message) => {
+    setEditingMessage(null);
+    setReplyingTo(message);
+  };
+
+  const handleEdit = (message) => {
+    setReplyingTo(null);
+    setEditingMessage(message);
+  };
+
+  const handleReact = (messageId, emoji) => {
+    socket?.emit("message:react", { conversationId, messageId, emoji });
+  };
+
+  const handleDelete = (message) => {
+    if (!window.confirm("Delete this message?")) return;
+    socket?.emit("message:delete", { conversationId, messageId: message._id });
+  };
+
+  // Debounced search-within-conversation
+  useEffect(() => {
+    if (!searchOpen) return;
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    setSearching(true);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(async () => {
+      try {
+        const { data } = await api.get(`/messages/${conversationId}/search`, {
+          params: { q: searchQuery.trim() },
+        });
+        setSearchResults(data.messages);
+      } finally {
+        setSearching(false);
+      }
+    }, 350);
+    return () => clearTimeout(searchDebounceRef.current);
+  }, [searchQuery, searchOpen, conversationId]);
+
+  const toggleSearch = () => {
+    setSearchOpen((prev) => {
+      const next = !prev;
+      if (!next) {
+        setSearchQuery("");
+        setSearchResults([]);
+      }
+      return next;
+    });
+  };
 
   const lastMessage = messages[messages.length - 1];
   const showSeen =
@@ -145,7 +227,48 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
               : "Offline"}
           </span>
         </span>
+        <button
+          onClick={toggleSearch}
+          className="icon-btn ms-auto"
+          aria-label="Search messages"
+          title="Search messages"
+        >
+          <i className="bi bi-search" />
+        </button>
       </div>
+
+      {searchOpen && (
+        <div className="search-panel">
+          <div className="search-input-wrap">
+            <i className="bi bi-search" />
+            <input
+              autoFocus
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search in this conversation"
+              className="form-control"
+            />
+            <button type="button" className="icon-btn" onClick={toggleSearch} aria-label="Close search">
+              <i className="bi bi-x-lg" />
+            </button>
+          </div>
+          {searching && <p className="empty-state py-2 mb-0">Searching…</p>}
+          {!searching && searchQuery.trim() && searchResults.length === 0 && (
+            <p className="empty-state py-2 mb-0">No matches</p>
+          )}
+          {!searching && searchResults.length > 0 && (
+            <div className="search-results">
+              {searchResults.map((m) => (
+                <div key={m._id} className="search-result-item">
+                  <span className="search-result-sender">{m.sender?.username}</span>
+                  <span className="search-result-text">{m.text}</span>
+                  <span className="search-result-time">{formatSearchTime(m.createdAt)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="message-list">
         {loading && (
@@ -170,7 +293,11 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
                 message={m}
                 isOwn={m.sender._id === user.id}
                 showSender={showSender}
-                onReply={setReplyingTo}
+                onReply={handleReply}
+                onReact={handleReact}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                currentUserId={user.id}
               />
             );
           })}
@@ -194,6 +321,8 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
         socket={socket}
         replyingTo={replyingTo}
         onCancelReply={() => setReplyingTo(null)}
+        editingMessage={editingMessage}
+        onCancelEdit={() => setEditingMessage(null)}
       />
     </div>
   );
