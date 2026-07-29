@@ -6,7 +6,6 @@ const messageSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Conversation",
       required: true,
-      index: true,
     },
     sender: {
       type: mongoose.Schema.Types.ObjectId,
@@ -54,5 +53,11 @@ const messageSchema = new mongoose.Schema(
 );
 
 messageSchema.index({ text: "text" });
+
+// Every message-history and search query filters by `conversation` and
+// sorts/cursors on `_id` — this compound index lets MongoDB satisfy both in
+// a single index scan instead of filtering conversation then sorting
+// separately. Replaces the old single-field index on `conversation` alone.
+messageSchema.index({ conversation: 1, _id: -1 });
 
 export default mongoose.model("Message", messageSchema);

@@ -12,6 +12,8 @@ const Chat = () => {
   const [conversations, setConversations] = useState([]);
   const [activeConversation, setActiveConversation] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [conversationsNextCursor, setConversationsNextCursor] = useState(null);
+  const [loadingMoreConversations, setLoadingMoreConversations] = useState(false);
   const [unreadIds, setUnreadIds] = useState(new Set());
   const [soundEnabled, setSoundEnabled] = useState(() => {
     const stored = localStorage.getItem("wire_sound_enabled");
@@ -28,6 +30,7 @@ const Chat = () => {
       try {
         const { data } = await api.get("/conversations");
         setConversations(data.conversations);
+        setConversationsNextCursor(data.nextCursor);
 
         const storedId = sessionStorage.getItem("wire_active_conversation");
         if (storedId) {
@@ -40,6 +43,26 @@ const Chat = () => {
     };
     fetchConversations();
   }, []);
+
+  // Fetches the next page of older/less-recently-active conversations,
+  // appended to the end of the list — triggered by scrolling near the
+  // bottom of the sidebar's conversation list.
+  const loadMoreConversations = async () => {
+    if (!conversationsNextCursor || loadingMoreConversations) return;
+    setLoadingMoreConversations(true);
+    try {
+      const { data } = await api.get("/conversations", {
+        params: {
+          cursor: conversationsNextCursor.cursor,
+          cursorId: conversationsNextCursor.cursorId,
+        },
+      });
+      setConversations((prev) => [...prev, ...data.conversations]);
+      setConversationsNextCursor(data.nextCursor);
+    } finally {
+      setLoadingMoreConversations(false);
+    }
+  };
 
   const updateConversationWithMessage = useCallback((message) => {
     setConversations((prev) => {
@@ -132,6 +155,9 @@ const Chat = () => {
             onToggleSound={toggleSound}
             onSelect={handleSelect}
             onConversationCreated={handleConversationCreated}
+            onLoadMore={loadMoreConversations}
+            hasMoreConversations={!!conversationsNextCursor}
+            loadingMoreConversations={loadingMoreConversations}
           />
         )}
       </div>

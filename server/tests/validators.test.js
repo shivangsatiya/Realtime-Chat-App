@@ -1,10 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { registerSchema, loginSchema } from "../src/validators/authValidators.js";
-import { startPrivateSchema, createGroupSchema } from "../src/validators/conversationValidators.js";
-import {
-  conversationIdParamSchema,
-  searchMessagesQuerySchema,
-} from "../src/validators/messageValidators.js";
+import { startPrivateSchema, createGroupSchema, conversationsPaginationQuerySchema } from "../src/validators/conversationValidators.js";
+import { conversationIdParamSchema, searchMessagesQuerySchema, messagesPaginationQuerySchema } from "../src/validators/messageValidators.js";
 import { searchQuerySchema } from "../src/validators/userValidators.js";
 
 describe("registerSchema", () => {
@@ -145,6 +142,85 @@ describe("searchQuerySchema (user search)", () => {
 
   it("rejects a search string over 100 characters", () => {
     const result = searchQuerySchema.safeParse({ search: "x".repeat(101) });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("messagesPaginationQuerySchema", () => {
+  it("defaults to limit 30 with no query params at all", () => {
+    const result = messagesPaginationQuerySchema.safeParse({});
+    expect(result.success).toBe(true);
+    expect(result.data.limit).toBe(30);
+    expect(result.data.cursor).toBeUndefined();
+  });
+
+  it("accepts a valid cursor and a custom limit", () => {
+    const result = messagesPaginationQuerySchema.safeParse({
+      cursor: "507f1f77bcf86cd799439011",
+      limit: "10",
+    });
+    expect(result.success).toBe(true);
+    expect(result.data.limit).toBe(10); // coerced from string to number
+  });
+
+  it("rejects a malformed cursor", () => {
+    const result = messagesPaginationQuerySchema.safeParse({ cursor: "not-an-id" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a limit above the 100 cap", () => {
+    const result = messagesPaginationQuerySchema.safeParse({ limit: "500" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a limit of 0", () => {
+    const result = messagesPaginationQuerySchema.safeParse({ limit: "0" });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("searchMessagesQuerySchema pagination fields", () => {
+  it("still requires q, even with pagination params present", () => {
+    const result = searchMessagesQuerySchema.safeParse({ cursor: "507f1f77bcf86cd799439011" });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts q with a valid cursor and limit together", () => {
+    const result = searchMessagesQuerySchema.safeParse({
+      q: "hello",
+      cursor: "507f1f77bcf86cd799439011",
+      limit: "5",
+    });
+    expect(result.success).toBe(true);
+    expect(result.data.limit).toBe(5);
+  });
+});
+
+describe("conversationsPaginationQuerySchema", () => {
+  it("defaults to limit 20 with no params", () => {
+    const result = conversationsPaginationQuerySchema.safeParse({});
+    expect(result.success).toBe(true);
+    expect(result.data.limit).toBe(20);
+  });
+
+  it("accepts a valid ISO datetime cursor paired with a cursorId", () => {
+    const result = conversationsPaginationQuerySchema.safeParse({
+      cursor: new Date().toISOString(),
+      cursorId: "507f1f77bcf86cd799439011",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a non-ISO cursor value", () => {
+    const result = conversationsPaginationQuerySchema.safeParse({ cursor: "yesterday" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a malformed cursorId", () => {
+    const result = conversationsPaginationQuerySchema.safeParse({
+      cursor: new Date().toISOString(),
+      cursorId: "bad-id",
+    });
     expect(result.success).toBe(false);
   });
 });

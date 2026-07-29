@@ -7,6 +7,8 @@ import MessageBubble from "./MessageBubble.jsx";
 import MessageInput from "./MessageInput.jsx";
 import TypingIndicator from "./TypingIndicator.jsx";
 
+const MESSAGES_PAGE_SIZE = 30;
+
 const getConversationLabel = (conversation, currentUserId) => {
   if (conversation.isGroup) return conversation.name;
   const other = conversation.participants.find((p) => p._id !== currentUserId);
@@ -21,6 +23,8 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
   const { socket, onlineUserIds } = useSocket();
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [typingUsers, setTypingUsers] = useState({}); // userId -> username
   const [otherHasSeenLatest, setOtherHasSeenLatest] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
@@ -29,8 +33,11 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [searchNextCursor, setSearchNextCursor] = useState(null);
+  const [searchLoadingMore, setSearchLoadingMore] = useState(false);
   const searchDebounceRef = useRef(null);
   const bottomRef = useRef(null);
+  const messageListRef = useRef(null);
   const conversationId = conversation._id;
 
   const other = !conversation.isGroup
@@ -39,11 +46,17 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
   const label = getConversationLabel(conversation, user.id);
   const isOnline = other && onlineUserIds.has(other._id);
 
-  // Load history + join the socket room whenever the active conversation changes
+  const scrollToBottom = (behavior = "smooth") => {
+    bottomRef.current?.scrollIntoView({ behavior });
+  };
+
+  // Load the most recent page + join the socket room whenever the active
+  // conversation changes
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setMessages([]);
+    setNextCursor(null);
     setTypingUsers({});
     setOtherHasSeenLatest(false);
     setReplyingTo(null);
@@ -51,8 +64,13 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
 
     const load = async () => {
       try {
-        const { data } = await api.get(`/messages/${conversationId}`);
-        if (!cancelled) setMessages(data.messages);
+        const { data } = await api.get(`/messages/${conversationId}`, {
+          params: { limit: MESSAGES_PAGE_SIZE },
+        });
+        if (!cancelled) {
+          setMessages(data.messages);
+          setNextCursor(data.nextCursor);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -67,6 +85,46 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
     };
   }, [conversationId, socket]);
 
+  // Pin to the bottom the moment the initial page finishes loading
+  useEffect(() => {
+    if (!loading) scrollToBottom("auto");
+  }, [loading]);
+
+  // Keep the bottom pinned when the typing indicator appears/disappears
+  useEffect(() => {
+    scrollToBottom();
+  }, [typingUsers]);
+
+  // Fetches the next-older page of messages ("load more" on scroll-up),
+  // preserving the reader's visual scroll position — without this, prepending
+  // older messages above the viewport would otherwise yank the view down.
+  const loadOlderMessages = async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    const container = messageListRef.current;
+    const prevScrollHeight = container?.scrollHeight ?? 0;
+    try {
+      const { data } = await api.get(`/messages/${conversationId}`, {
+        params: { cursor: nextCursor, limit: MESSAGES_PAGE_SIZE },
+      });
+      setMessages((prev) => [...data.messages, ...prev]);
+      setNextCursor(data.nextCursor);
+      requestAnimationFrame(() => {
+        if (container) {
+          container.scrollTop = container.scrollHeight - prevScrollHeight;
+        }
+      });
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  const handleMessageListScroll = (e) => {
+    if (e.target.scrollTop < 150 && nextCursor && !loadingMore && !loading) {
+      loadOlderMessages();
+    }
+  };
+
   // Socket listeners scoped to the currently open conversation
   useEffect(() => {
     if (!socket) return;
@@ -74,6 +132,7 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
     const handleNewMessage = (message) => {
       if (message.conversation !== conversationId) return;
       setMessages((prev) => [...prev, message]);
+      scrollToBottom();
       onMessageActivity?.(message);
       if (message.sender._id !== user.id) {
         socket.emit("message:read", { conversationId });
@@ -126,10 +185,6 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
     };
   }, [socket, conversationId, user.id, onMessageActivity]);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, typingUsers]);
-
   const typingLabel = Object.values(typingUsers)[0]
     ? `${Object.values(typingUsers)[0]} is typing…`
     : null;
@@ -153,11 +208,12 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
     socket?.emit("message:delete", { conversationId, messageId: message._id });
   };
 
-  // Debounced search-within-conversation
+  // Debounced search-within-conversation (fresh query each time)
   useEffect(() => {
     if (!searchOpen) return;
     if (!searchQuery.trim()) {
       setSearchResults([]);
+      setSearchNextCursor(null);
       return;
     }
     setSearching(true);
@@ -168,6 +224,7 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
           params: { q: searchQuery.trim() },
         });
         setSearchResults(data.messages);
+        setSearchNextCursor(data.nextCursor);
       } finally {
         setSearching(false);
       }
@@ -175,12 +232,37 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
     return () => clearTimeout(searchDebounceRef.current);
   }, [searchQuery, searchOpen, conversationId]);
 
+  // Loads the next page of search results, appended to the end — no scroll
+  // preservation needed here since results grow downward, not upward.
+  const loadMoreSearchResults = async () => {
+    if (!searchNextCursor || searchLoadingMore) return;
+    setSearchLoadingMore(true);
+    try {
+      const { data } = await api.get(`/messages/${conversationId}/search`, {
+        params: { q: searchQuery.trim(), cursor: searchNextCursor },
+      });
+      setSearchResults((prev) => [...prev, ...data.messages]);
+      setSearchNextCursor(data.nextCursor);
+    } finally {
+      setSearchLoadingMore(false);
+    }
+  };
+
+  const handleSearchResultsScroll = (e) => {
+    const el = e.target;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+    if (nearBottom && searchNextCursor && !searchLoadingMore) {
+      loadMoreSearchResults();
+    }
+  };
+
   const toggleSearch = () => {
     setSearchOpen((prev) => {
       const next = !prev;
       if (!next) {
         setSearchQuery("");
         setSearchResults([]);
+        setSearchNextCursor(null);
       }
       return next;
     });
@@ -257,7 +339,7 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
             <p className="empty-state py-2 mb-0">No matches</p>
           )}
           {!searching && searchResults.length > 0 && (
-            <div className="search-results">
+            <div className="search-results" onScroll={handleSearchResultsScroll}>
               {searchResults.map((m) => (
                 <div key={m._id} className="search-result-item">
                   <span className="search-result-sender">{m.sender?.username}</span>
@@ -265,18 +347,35 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
                   <span className="search-result-time">{formatSearchTime(m.createdAt)}</span>
                 </div>
               ))}
+              {searchLoadingMore && (
+                <p className="empty-state py-2 mb-0" style={{ fontSize: "0.75rem" }}>
+                  Loading more…
+                </p>
+              )}
             </div>
           )}
         </div>
       )}
 
-      <div className="message-list">
+      <div className="message-list" ref={messageListRef} onScroll={handleMessageListScroll}>
         {loading && (
           <>
             <div className="skeleton-bubble" style={{ width: "45%", alignSelf: "flex-start" }} />
             <div className="skeleton-bubble" style={{ width: "60%", alignSelf: "flex-end" }} />
             <div className="skeleton-bubble" style={{ width: "35%", alignSelf: "flex-start" }} />
           </>
+        )}
+
+        {!loading && loadingMore && (
+          <p className="empty-state mb-2" style={{ fontSize: "0.75rem" }}>
+            <i className="bi bi-arrow-repeat me-1" /> Loading older messages…
+          </p>
+        )}
+
+        {!loading && !nextCursor && messages.length > 0 && (
+          <p className="empty-state mb-2" style={{ fontSize: "0.7rem" }}>
+            Beginning of conversation
+          </p>
         )}
 
         {!loading && messages.length === 0 && (

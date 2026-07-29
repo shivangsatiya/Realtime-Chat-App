@@ -3,25 +3,50 @@ import Conversation from "../models/Conversation.js";
 import { protect } from "../middleware/auth.js";
 import asyncHandler from "../middleware/asyncHandler.js";
 import validate from "../middleware/validate.js";
-import { startPrivateSchema, createGroupSchema } from "../validators/conversationValidators.js";
+import {
+  startPrivateSchema,
+  createGroupSchema,
+  conversationsPaginationQuerySchema,
+} from "../validators/conversationValidators.js";
 
 const router = express.Router();
 
-// @route  GET /api/conversations
-// List all conversations the current user belongs to, most recent first
+// @route  GET /api/conversations?cursor=...&cursorId=...&limit=...
+// Lists conversations most-recent-activity-first. Pass `cursor` (the
+// updatedAt of the last conversation already loaded) and `cursorId` (its
+// _id, as a tiebreaker) to fetch the next page.
 router.get(
   "/",
   protect,
+  validate(conversationsPaginationQuerySchema, "query"),
   asyncHandler(async (req, res) => {
-    const conversations = await Conversation.find({ participants: req.user._id })
+    const { cursor, cursorId, limit } = req.query;
+
+    const filter = { participants: req.user._id };
+    if (cursor && cursorId) {
+      filter.$or = [
+        { updatedAt: { $lt: new Date(cursor) } },
+        { updatedAt: new Date(cursor), _id: { $lt: cursorId } },
+      ];
+    }
+
+    const results = await Conversation.find(filter)
       .populate("participants", "-password")
       .populate({
         path: "lastMessage",
         populate: { path: "sender", select: "username" },
       })
-      .sort({ updatedAt: -1 });
+      .sort({ updatedAt: -1, _id: -1 })
+      .limit(limit + 1);
 
-    res.json({ conversations });
+    const hasMore = results.length > limit;
+    const page = hasMore ? results.slice(0, limit) : results;
+    const last = page[page.length - 1];
+
+    res.json({
+      conversations: page,
+      nextCursor: hasMore ? { cursor: last.updatedAt, cursorId: last._id } : null,
+    });
   })
 );
 

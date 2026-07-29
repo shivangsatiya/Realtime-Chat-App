@@ -37,4 +37,8 @@ conversationSchema.index(
   { partialFilterExpression: { isGroup: false } }
 );
 
+// Matches the conversation-list pagination query exactly: filter by
+// participant, sorted/cursored on (updatedAt, _id).
+conversationSchema.index({ participants: 1, updatedAt: -1, _id: -1 });
+
 export default mongoose.model("Conversation", conversationSchema);

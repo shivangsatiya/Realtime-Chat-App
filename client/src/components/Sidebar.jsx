@@ -18,10 +18,21 @@ const Sidebar = ({
   onToggleSound,
   onSelect,
   onConversationCreated,
+  onLoadMore,
+  hasMoreConversations,
+  loadingMoreConversations,
 }) => {
   const { user, logout } = useAuth();
   const { onlineUserIds } = useSocket();
   const [modalOpen, setModalOpen] = useState(false);
+
+  const handleScroll = (e) => {
+    const el = e.target;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+    if (nearBottom && hasMoreConversations && !loadingMoreConversations) {
+      onLoadMore?.();
+    }
+  };
 
   return (
     <div className="sidebar-panel">
@@ -50,7 +61,7 @@ const Sidebar = ({
         </div>
       </div>
 
-      <div className="conversation-list">
+      <div className="conversation-list" onScroll={handleScroll}>
         {conversations.length === 0 && (
           <p className="empty-state">No conversations yet. Tap + to start one.</p>
         )}
@@ -95,6 +106,11 @@ const Sidebar = ({
             </button>
           );
         })}
+        {loadingMoreConversations && (
+          <p className="empty-state py-2" style={{ fontSize: "0.75rem" }}>
+            <i className="bi bi-arrow-repeat me-1" /> Loading more…
+          </p>
+        )}
       </div>
 
       <div className="sidebar-footer border-top">
