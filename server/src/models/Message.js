@@ -15,9 +15,9 @@ const messageSchema = new mongoose.Schema(
     },
     text: {
       type: String,
-      required: true,
       trim: true,
       maxlength: 4000,
+      default: "",
     },
     readBy: [
       {
@@ -43,6 +43,11 @@ const messageSchema = new mongoose.Schema(
     isDeleted: {
       type: Boolean,
       default: false,
+    },
+    attachment: {
+      url: { type: String, default: null },
+      type: { type: String, enum: ["image", "file", null], default: null },
+      name: { type: String, default: null },
     },
   },
   { timestamps: true }

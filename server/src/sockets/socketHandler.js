@@ -67,9 +67,10 @@ export const initSocket = (io) => {
     });
 
     // --- Send a message ---
-    socket.on("message:send", async ({ conversationId, text, replyTo }, callback) => {
+    socket.on("message:send", async ({ conversationId, text, replyTo, attachment }, callback) => {
       try {
-        if (!text || !text.trim()) {
+        const trimmedText = text ? text.trim() : "";
+        if (!trimmedText && !attachment?.url) {
           return callback?.({ error: "Message cannot be empty" });
         }
 
@@ -93,9 +94,16 @@ export const initSocket = (io) => {
         const message = await Message.create({
           conversation: conversationId,
           sender: userId,
-          text: text.trim(),
+          text: trimmedText,
           readBy: [userId],
           replyTo: replyToId,
+          attachment: attachment?.url
+            ? {
+                url: attachment.url,
+                type: attachment.type === "image" ? "image" : "file",
+                name: attachment.name || "file",
+              }
+            : undefined,
         });
 
         conversation.lastMessage = message._id;

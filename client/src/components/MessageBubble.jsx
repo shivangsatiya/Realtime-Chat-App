@@ -108,6 +108,22 @@ const MessageBubble = ({ message, isOwn, showSender, onReply, onReact, onEdit, o
                 <span className="reply-quote-text">{message.replyTo.text}</span>
               </div>
             )}
+            {message.attachment?.url && message.attachment.type === "image" && (
+              <a href={message.attachment.url} target="_blank" rel="noopener noreferrer">
+                <img src={message.attachment.url} alt="Attachment" className="message-attachment-image" />
+              </a>
+            )}
+            {message.attachment?.url && message.attachment.type === "file" && (
+              <a
+                href={message.attachment.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="message-attachment-file"
+              >
+                <i className="bi bi-file-earmark-arrow-down" />
+                <span>{message.attachment.name || "Download file"}</span>
+              </a>
+            )}
             {message.text}
           </div>
         </div>
