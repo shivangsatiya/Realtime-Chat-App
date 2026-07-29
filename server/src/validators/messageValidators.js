@@ -1,29 +1,24 @@
 import { z } from "zod";
 
-// Matches a Mongo ObjectId's shape: 24 hex characters
-const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, "Must be a valid ID");
-
-export const startPrivateSchema = z.object({
-  userId: objectId,
+export const conversationIdParamSchema = z.object({
+  conversationId: z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid conversation ID"),
 });
 
-export const createGroupSchema = z.object({
-  name: z
-    .string({ error: "Group name is required" })
+// Cursor is the _id of the last message already loaded on the client — we
+// fetch messages older than it. ObjectIds are roughly time-ordered, so
+// sorting/cursoring on _id avoids needing a separate compound index on
+// createdAt while giving the same effective ordering.
+export const messagesPaginationQuerySchema = z.object({
+  cursor: z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid cursor").optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(30),
+});
+
+export const searchMessagesQuerySchema = z.object({
+  q: z
+    .string({ error: "Search text is required" })
     .trim()
-    .min(1, "Group name is required")
-    .max(80, "Group name must be at most 80 characters"),
-  participantIds: z
-    .array(objectId, { error: "participantIds is required" })
-    .min(2, "A group needs at least 2 other participants"),
-});
-
-// Conversations are sorted by updatedAt (most recent activity first), not
-// creation order, so a single-field cursor risks colliding when two
-// conversations share the same updatedAt. This pairs it with the
-// conversation's own _id as a tiebreaker for a stable cursor.
-export const conversationsPaginationQuerySchema = z.object({
-  cursor: z.string().datetime().optional(),
-  cursorId: objectId.optional(),
-  limit: z.coerce.number().int().min(1).max(50).optional().default(20),
+    .min(1, "Search text is required")
+    .max(200, "Search text is too long"),
+  cursor: z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid cursor").optional(),
+  limit: z.coerce.number().int().min(1).max(50).optional().default(30),
 });
