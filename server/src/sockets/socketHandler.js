@@ -67,7 +67,7 @@ export const initSocket = (io) => {
     });
 
     // --- Send a message ---
-    socket.on("message:send", async ({ conversationId, text }, callback) => {
+    socket.on("message:send", async ({ conversationId, text, replyTo }, callback) => {
       try {
         if (!text || !text.trim()) {
           return callback?.({ error: "Message cannot be empty" });
@@ -78,17 +78,37 @@ export const initSocket = (io) => {
           return callback?.({ error: "Not a participant of this conversation" });
         }
 
+        let replyToId = null;
+        if (replyTo) {
+          // The replied-to message must actually belong to this conversation —
+          // otherwise a crafted payload could reference a message from a
+          // conversation the sender has no access to.
+          const repliedMessage = await Message.findOne({ _id: replyTo, conversation: conversationId });
+          if (!repliedMessage) {
+            return callback?.({ error: "Cannot reply to a message outside this conversation" });
+          }
+          replyToId = repliedMessage._id;
+        }
+
         const message = await Message.create({
           conversation: conversationId,
           sender: userId,
           text: text.trim(),
           readBy: [userId],
+          replyTo: replyToId,
         });
 
         conversation.lastMessage = message._id;
         await conversation.save();
 
-        const populated = await message.populate("sender", "username avatarColor");
+        const populated = await message.populate([
+          { path: "sender", select: "username avatarColor" },
+          {
+            path: "replyTo",
+            select: "text sender",
+            populate: { path: "sender", select: "username" },
+          },
+        ]);
 
         io.to(conversationId).emit("message:new", populated);
         callback?.({ message: populated });

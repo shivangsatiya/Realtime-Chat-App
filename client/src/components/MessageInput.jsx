@@ -3,12 +3,13 @@ import { useEffect, useRef, useState } from "react";
 const TYPING_STOP_DELAY = 1500;
 const SENT_FLOURISH_DURATION = 400;
 
-const MessageInput = ({ conversationId, socket }) => {
+const MessageInput = ({ conversationId, socket, replyingTo, onCancelReply }) => {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [justSent, setJustSent] = useState(false);
   const typingTimeoutRef = useRef(null);
   const isTypingRef = useRef(false);
+  const inputRef = useRef(null);
 
   // Reset the composer whenever the active conversation changes
   useEffect(() => {
@@ -16,6 +17,11 @@ const MessageInput = ({ conversationId, socket }) => {
     isTypingRef.current = false;
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
   }, [conversationId]);
+
+  // Focus the input the moment a reply target is picked
+  useEffect(() => {
+    if (replyingTo) inputRef.current?.focus();
+  }, [replyingTo]);
 
   const stopTyping = () => {
     if (isTypingRef.current) {
@@ -45,35 +51,59 @@ const MessageInput = ({ conversationId, socket }) => {
     setSending(true);
     stopTyping();
 
-    socket.emit("message:send", { conversationId, text: trimmed }, (response) => {
-      setSending(false);
-      if (!response?.error) {
-        setText("");
-        setJustSent(true);
-        setTimeout(() => setJustSent(false), SENT_FLOURISH_DURATION);
+    socket.emit(
+      "message:send",
+      { conversationId, text: trimmed, replyTo: replyingTo?._id },
+      (response) => {
+        setSending(false);
+        if (!response?.error) {
+          setText("");
+          setJustSent(true);
+          setTimeout(() => setJustSent(false), SENT_FLOURISH_DURATION);
+          onCancelReply?.();
+        }
       }
-    });
+    );
   };
 
   return (
-    <form onSubmit={handleSubmit} className="message-input-bar">
-      <input
-        type="text"
-        value={text}
-        onChange={handleChange}
-        placeholder="Type a message"
-        className="form-control"
-        autoComplete="off"
-      />
-      <button
-        type="submit"
-        disabled={!text.trim() || sending}
-        className={`send-btn ${justSent ? "sent" : ""}`}
-        aria-label="Send message"
-      >
-        <i className="bi bi-send-fill" style={{ fontSize: "0.95rem" }} />
-      </button>
-    </form>
+    <div className="message-input-area">
+      {replyingTo && (
+        <div className="reply-preview-bar">
+          <div className="reply-preview-content">
+            <span className="reply-preview-label">Replying to {replyingTo.sender?.username}</span>
+            <span className="reply-preview-text">{replyingTo.text}</span>
+          </div>
+          <button
+            type="button"
+            className="reply-preview-cancel"
+            onClick={onCancelReply}
+            aria-label="Cancel reply"
+          >
+            <i className="bi bi-x-lg" />
+          </button>
+        </div>
+      )}
+      <form onSubmit={handleSubmit} className="message-input-bar">
+        <input
+          ref={inputRef}
+          type="text"
+          value={text}
+          onChange={handleChange}
+          placeholder="Type a message"
+          className="form-control"
+          autoComplete="off"
+        />
+        <button
+          type="submit"
+          disabled={!text.trim() || sending}
+          className={`send-btn ${justSent ? "sent" : ""}`}
+          aria-label="Send message"
+        >
+          <i className="bi bi-send-fill" style={{ fontSize: "0.95rem" }} />
+        </button>
+      </form>
+    </div>
   );
 };
 

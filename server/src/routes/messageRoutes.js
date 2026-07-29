@@ -23,6 +23,11 @@ router.get(
 
     const messages = await Message.find({ conversation: conversationId })
       .populate("sender", "username avatarColor")
+      .populate({
+        path: "replyTo",
+        select: "text sender",
+        populate: { path: "sender", select: "username" },
+      })
       .sort({ createdAt: 1 });
 
     res.json({ messages });

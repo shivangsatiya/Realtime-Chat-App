@@ -20,6 +20,7 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
   const [loading, setLoading] = useState(true);
   const [typingUsers, setTypingUsers] = useState({}); // userId -> username
   const [otherHasSeenLatest, setOtherHasSeenLatest] = useState(false);
+  const [replyingTo, setReplyingTo] = useState(null);
   const bottomRef = useRef(null);
   const conversationId = conversation._id;
 
@@ -36,6 +37,7 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
     setMessages([]);
     setTypingUsers({});
     setOtherHasSeenLatest(false);
+    setReplyingTo(null);
 
     const load = async () => {
       try {
@@ -168,6 +170,7 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
                 message={m}
                 isOwn={m.sender._id === user.id}
                 showSender={showSender}
+                onReply={setReplyingTo}
               />
             );
           })}
@@ -186,7 +189,12 @@ const ChatWindow = ({ conversation, onMessageActivity, onBack }) => {
         <div ref={bottomRef} />
       </div>
 
-      <MessageInput conversationId={conversationId} socket={socket} />
+      <MessageInput
+        conversationId={conversationId}
+        socket={socket}
+        replyingTo={replyingTo}
+        onCancelReply={() => setReplyingTo(null)}
+      />
     </div>
   );
 };
