@@ -5,12 +5,14 @@ import { protect } from "../middleware/auth.js";
 import asyncHandler from "../middleware/asyncHandler.js";
 import validate from "../middleware/validate.js";
 import { registerSchema, loginSchema } from "../validators/authValidators.js";
+import { authLimiter } from "../middleware/rateLimiters.js";
 
 const router = express.Router();
 
 // @route  POST /api/auth/register
 router.post(
   "/register",
+  authLimiter,
   validate(registerSchema),
   asyncHandler(async (req, res) => {
     const { username, email, password } = req.body;
@@ -30,6 +32,7 @@ router.post(
 // @route  POST /api/auth/login
 router.post(
   "/login",
+  authLimiter,
   validate(loginSchema),
   asyncHandler(async (req, res) => {
     const { email, password } = req.body;

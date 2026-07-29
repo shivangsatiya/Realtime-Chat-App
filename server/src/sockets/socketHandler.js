@@ -28,6 +28,15 @@ const removeOnlineSocket = (userId, socketId) => {
 const isParticipant = (conversation, userId) =>
   !!conversation && conversation.participants.some((p) => String(p) === userId);
 
+// Logs the real error server-side and returns a generic message to the
+// client. Sockets don't go through Express's centralized error middleware,
+// but this applies the same principle: no internal error details (Mongoose
+// CastErrors, validation text, etc.) ever reach the client.
+const handleSocketError = (err, callback) => {
+  console.error(err);
+  callback?.({ error: "Something went wrong. Please try again." });
+};
+
 export const initSocket = (io) => {
   // Authenticate every socket connection using the same JWT issued by /api/auth
   io.use(async (socket, next) => {
@@ -121,7 +130,7 @@ export const initSocket = (io) => {
         io.to(conversationId).emit("message:new", populated);
         callback?.({ message: populated });
       } catch (err) {
-        callback?.({ error: err.message });
+        handleSocketError(err, callback);
       }
     });
 
@@ -160,7 +169,7 @@ export const initSocket = (io) => {
         });
         callback?.({ reactions: message.reactions });
       } catch (err) {
-        callback?.({ error: err.message });
+        handleSocketError(err, callback);
       }
     });
 
@@ -198,7 +207,7 @@ export const initSocket = (io) => {
         });
         callback?.({ message });
       } catch (err) {
-        callback?.({ error: err.message });
+        handleSocketError(err, callback);
       }
     });
 
@@ -225,27 +234,39 @@ export const initSocket = (io) => {
         io.to(conversationId).emit("message:deleted", { messageId: message._id });
         callback?.({ success: true });
       } catch (err) {
-        callback?.({ error: err.message });
+        handleSocketError(err, callback);
       }
     });
 
     // --- Typing indicators ---
-    socket.on("typing:start", ({ conversationId }) => {
-      socket.to(conversationId).emit("typing:update", {
-        conversationId,
-        userId,
-        username: socket.user.username,
-        isTyping: true,
-      });
+    socket.on("typing:start", async ({ conversationId }) => {
+      try {
+        const conversation = await Conversation.findById(conversationId);
+        if (!isParticipant(conversation, userId)) return;
+        socket.to(conversationId).emit("typing:update", {
+          conversationId,
+          userId,
+          username: socket.user.username,
+          isTyping: true,
+        });
+      } catch (err) {
+        // Non-critical, safe to ignore
+      }
     });
 
-    socket.on("typing:stop", ({ conversationId }) => {
-      socket.to(conversationId).emit("typing:update", {
-        conversationId,
-        userId,
-        username: socket.user.username,
-        isTyping: false,
-      });
+    socket.on("typing:stop", async ({ conversationId }) => {
+      try {
+        const conversation = await Conversation.findById(conversationId);
+        if (!isParticipant(conversation, userId)) return;
+        socket.to(conversationId).emit("typing:update", {
+          conversationId,
+          userId,
+          username: socket.user.username,
+          isTyping: false,
+        });
+      } catch (err) {
+        // Non-critical, safe to ignore
+      }
     });
 
     // --- Read receipts ---

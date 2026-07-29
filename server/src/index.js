@@ -2,6 +2,7 @@ import express from "express";
 import http from "http";
 import cors from "cors";
 import dotenv from "dotenv";
+import helmet from "helmet";
 import { Server } from "socket.io";
 
 import { connectDB } from "./config/db.js";
@@ -20,6 +21,7 @@ const server = http.createServer(app);
 
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
 
+app.use(helmet());
 app.use(cors({ origin: CLIENT_URL, credentials: true }));
 app.use(express.json());
 
