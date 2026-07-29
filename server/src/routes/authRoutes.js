@@ -39,9 +39,6 @@ router.post(
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    user.isOnline = true;
-    await user.save();
-
     const token = generateToken(user._id);
     res.json({ token, user: user.toSafeObject() });
   })
